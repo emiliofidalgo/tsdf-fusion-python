@@ -17,14 +17,14 @@ if __name__ == "__main__":
   # ======================================================================================================== #
   print("Estimating voxel volume bounds...")
   n_imgs = 1000
-  cam_intr = np.loadtxt("data/camera-intrinsics.txt", delimiter=' ')
+  cam_intr = np.loadtxt("../data/camera-intrinsics.txt", delimiter=' ')
   vol_bnds = np.zeros((3,2))
   for i in range(n_imgs):
     # Read depth image and camera pose
-    depth_im = cv2.imread("data/frame-%06d.depth.png"%(i),-1).astype(float)
+    depth_im = cv2.imread("../data/frame-%06d.depth.png"%(i),-1).astype(float)
     depth_im /= 1000.  # depth is saved in 16-bit PNG in millimeters
     depth_im[depth_im == 65.535] = 0  # set invalid depth to 0 (specific to 7-scenes dataset)
-    cam_pose = np.loadtxt("data/frame-%06d.pose.txt"%(i))  # 4x4 rigid transformation matrix
+    cam_pose = np.loadtxt("../data/frame-%06d.pose.txt"%(i))  # 4x4 rigid transformation matrix
 
     # Compute camera view frustum and extend convex hull
     view_frust_pts = fusion.get_view_frustum(depth_im, cam_intr, cam_pose)
@@ -45,11 +45,11 @@ if __name__ == "__main__":
     print("Fusing frame %d/%d"%(i+1, n_imgs))
 
     # Read RGB-D image and camera pose
-    color_image = cv2.cvtColor(cv2.imread("data/frame-%06d.color.jpg"%(i)), cv2.COLOR_BGR2RGB)
-    depth_im = cv2.imread("data/frame-%06d.depth.png"%(i),-1).astype(float)
+    color_image = cv2.cvtColor(cv2.imread("../data/frame-%06d.color.jpg"%(i)), cv2.COLOR_BGR2RGB)
+    depth_im = cv2.imread("../data/frame-%06d.depth.png"%(i),-1).astype(float)
     depth_im /= 1000.
     depth_im[depth_im == 65.535] = 0
-    cam_pose = np.loadtxt("data/frame-%06d.pose.txt"%(i))
+    cam_pose = np.loadtxt("../data/frame-%06d.pose.txt"%(i))
 
     # Integrate observation into voxel volume (assume color aligned with depth)
     tsdf_vol.integrate(color_image, depth_im, cam_intr, cam_pose, obs_weight=1.)
