@@ -30,6 +30,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 import argparse
 import cv2
 import datetime
+import fusion_nonum as fusion
 import numpy as np
 import os
 import shutil
@@ -52,7 +53,14 @@ class Observation:
         val += 'Depth file: %s\n' % self.depth_filename
         val += 'Pose:\n %s\n' % np.array_str(self.pose)
         return val
-
+    
+    def load_RGB(self):
+        return cv2.cvtColor(cv2.imread(self.rgb_filename), cv2.COLOR_BGR2RGB)
+    
+    def load_D(self):
+        img = cv2.imread(self.depth_filename,-1).astype(float)
+        img /= 5000.
+        return img
 
 class TSDFBuilder:
 
@@ -163,6 +171,53 @@ class TSDFBuilder:
                 observations.append(obs)                
 
         return observations
+    
+    def fuse(self):
+        # Estimate voxel volume bounds
+        print("Estimating voxel volume bounds...")        
+        
+        vol_bnds = np.zeros((3,2))
+        for frame in self._frames:
+            # Read depth image and camera pose
+            depth_im = frame.load_D()
+            cam_pose = frame.pose
+
+            # Compute camera view frustum and extend convex hull
+            view_frust_pts = fusion.get_view_frustum(depth_im, self._cam_intr, cam_pose)
+            vol_bnds[:,0] = np.minimum(vol_bnds[:,0], np.amin(view_frust_pts, axis=1))
+            vol_bnds[:,1] = np.maximum(vol_bnds[:,1], np.amax(view_frust_pts, axis=1))
+        
+        # Initialize voxel volume
+        print("Initializing voxel volume...")
+        self._tsdf_vol = fusion.TSDFVolume(vol_bnds, self._voxel_size)
+
+        # Loop through RGB-D images and fuse them together
+        t0_elapse = time.time()
+        for i,frame in enumerate(self._frames):
+            print("Fusing frame %d/%d" % (i+1, len(self._frames)))
+
+            # Read RGB-D image and camera pose
+            color_image = frame.load_RGB()
+            depth_im = frame.load_D()
+            cam_pose = frame.pose
+
+            # Integrate observation into voxel volume (assume color aligned with depth)
+            self._tsdf_vol.integrate(color_image, depth_im, self._cam_intr
+            , cam_pose, obs_weight=1.)
+        
+        fps = len(self._frames) / (time.time() - t0_elapse)
+        print("Average FPS: {:.2f}".format(fps))
+    
+    def save_mesh(self):
+        # Get mesh from voxel volume and save to disk (can be viewed with Meshlab)
+        now = datetime.datetime.now()
+        fullday = now.strftime("%Y%m%d")
+        fullhour = now.strftime("%H_%M_%S")
+        
+        mesh_filename = os.path.join(self._data_dir, 'mesh_' + fullday + '_' + fullhour + '.ply')
+        print("Saving mesh to %s ..." % mesh_filename)
+        verts, faces, norms, colors = self._tsdf_vol.get_mesh()
+        fusion.meshwrite(mesh_filename, verts, faces, norms, colors)
 
 if __name__ == "__main__":
     # Reading parameters
@@ -182,3 +237,5 @@ if __name__ == "__main__":
         sys.exit(0)
     
     builder = TSDFBuilder(args)
+    builder.fuse()
+    builder.save_mesh()
