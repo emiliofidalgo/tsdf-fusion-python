@@ -31,8 +31,11 @@ import argparse
 import cv2
 import datetime
 import fusion_nonum as fusion
+import matplotlib.pyplot as plt
+from mpl_toolkits import mplot3d
 import numpy as np
 import os
+from pyquaternion import Quaternion
 import shutil
 import sys
 import time
@@ -138,17 +141,28 @@ class TSDFBuilder:
         qy = float(pose_data[10])
         qz = float(pose_data[11])
 
-        pose[0,0] = 1 - 2*qy**2 - 2*qz**2
-        pose[0,1] = 2*qx*qy - 2*qz*qw
-        pose[0,2] = 2*qx*qz + 2*qy*qw
-        pose[1,0] = 2*qx*qy + 2*qz*qw
-        pose[1,1] = 1 - 2*qx**2 - 2*qz**2
-        pose[1,2] = 2*qy*qz - 2*qx*qw
-        pose[2,0] = 2*qx*qz - 2*qy*qw
-        pose[2,1] = 2*qy*qz + 2*qx*qw
-        pose[2,2] =	1 - 2*qx**2 - 2*qy**2
+        quat = Quaternion(qw, qx, qy, qz)
 
-        return pose
+        # pose[0,0] = 1 - 2*qy**2 - 2*qz**2
+        # pose[0,1] = 2*qx*qy - 2*qz*qw
+        # pose[0,2] = 2*qx*qz + 2*qy*qw
+        # pose[1,0] = 2*qx*qy + 2*qz*qw
+        # pose[1,1] = 1 - 2*qx**2 - 2*qz**2
+        # pose[1,2] = 2*qy*qz - 2*qx*qw
+        # pose[2,0] = 2*qx*qz - 2*qy*qw
+        # pose[2,1] = 2*qy*qz + 2*qx*qw
+        # pose[2,2] =	1 - 2*qx**2 - 2*qy**2
+
+        pose[:3,:3] = quat.rotation_matrix
+
+        static_trans = np.eye(4)
+        static_trans[:3,:3] = np.array([[0.9975641, 0.0000000, 0.0697565],
+                                        [0.0000000, 1.0000000, 0.0000000],
+                                        [-0.0697565, 0.0000000, 0.9975641]])
+        static_trans[0, 3] = 0.15
+        static_trans[2, 3] = -0.05
+
+        return np.matmul(static_trans, pose)
     
     def _prepare_frames(self):
 
@@ -172,6 +186,60 @@ class TSDFBuilder:
 
         return observations
     
+    def _draw_progress_bar(self, percent, bar_len=20):
+        # percent float from 0 to 1.
+        sys.stdout.write("\r")
+        sys.stdout.write("[{:<{}}] {:.0f}%".format("=" * int(bar_len * percent), bar_len, percent * 100))
+        sys.stdout.flush()
+    
+    def plot_positions(self):
+        assert len(self._frames) != 0
+
+        plt.figure()
+        ax = plt.axes(projection='3d')
+        ax.set_aspect('equal')
+
+        # Plotting associated poses to each frame
+        x_coords = [frame.pose[0, 3] for frame in self._frames]
+        y_coords = [frame.pose[1, 3] for frame in self._frames]
+        z_coords = [frame.pose[2, 3] for frame in self._frames]
+        ax.plot3D(x_coords, y_coords, z_coords, 'r')    
+
+        # Plotting original poses
+        # Get pose info
+        x_orig = [float(self._poses[tstamp][6]) for tstamp in self._pose_timestamps]
+        y_orig = [float(self._poses[tstamp][7]) for tstamp in self._pose_timestamps]
+        z_orig = [float(self._poses[tstamp][8]) for tstamp in self._pose_timestamps]
+        ax.plot3D(x_orig, y_orig, z_orig, 'b')
+
+        ax.set_xlabel('X(m)')
+        ax.set_ylabel('Y(m)')
+        ax.set_zlabel('Z(m)')
+
+        x_limits = ax.get_xlim3d()
+        y_limits = ax.get_ylim3d()
+        z_limits = ax.get_zlim3d()
+
+        x_range = abs(x_limits[1] - x_limits[0])
+        x_middle = np.mean(x_limits)
+        y_range = abs(y_limits[1] - y_limits[0])
+        y_middle = np.mean(y_limits)
+        z_range = abs(z_limits[1] - z_limits[0])
+        z_middle = np.mean(z_limits)
+
+        # The plot bounding box is a sphere in the sense of the infinity
+        # norm, hence I call half the max range the plot radius.
+        plot_radius = 0.5*max([x_range, y_range, z_range])
+
+        ax.set_xlim3d([x_middle - plot_radius, x_middle + plot_radius])
+        ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
+        ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
+
+        ax.view_init(21,-165)
+        plt.legend(loc=1, fontsize=12)
+
+        plt.show()
+    
     def fuse(self):
         # Estimate voxel volume bounds
         print("Estimating voxel volume bounds...")        
@@ -194,7 +262,8 @@ class TSDFBuilder:
         # Loop through RGB-D images and fuse them together
         t0_elapse = time.time()
         for i,frame in enumerate(self._frames):
-            print("Fusing frame %d/%d" % (i+1, len(self._frames)))
+            #print("Fusing frame %d/%d" % (i+1, len(self._frames)))
+            self._draw_progress_bar(float(i) / len(self._frames))
 
             # Read RGB-D image and camera pose
             color_image = frame.load_RGB()
@@ -204,6 +273,8 @@ class TSDFBuilder:
             # Integrate observation into voxel volume (assume color aligned with depth)
             self._tsdf_vol.integrate(color_image, depth_im, self._cam_intr
             , cam_pose, obs_weight=1.)
+        
+        self._draw_progress_bar(1.0)
         
         fps = len(self._frames) / (time.time() - t0_elapse)
         print("Average FPS: {:.2f}".format(fps))
@@ -239,3 +310,5 @@ if __name__ == "__main__":
     builder = TSDFBuilder(args)
     builder.fuse()
     builder.save_mesh()
+    
+    #builder.plot_positions()
