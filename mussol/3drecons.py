@@ -162,7 +162,7 @@ class TSDFBuilder:
         static_trans[0, 3] = 0.15
         static_trans[2, 3] = -0.05
 
-        return np.matmul(static_trans, pose)
+        return np.matmul(pose, static_trans)
     
     def _prepare_frames(self):
 
@@ -297,7 +297,7 @@ if __name__ == "__main__":
                         help="directory where the files are stored")
     parser.add_argument("-vs", "--voxel_size", default=0.02,
                         help="voxel size in meters")
-    parser.add_argument("-pose", "--pose_filename", default='_ekf_local_odom.csv',
+    parser.add_argument("-pose", "--pose_filename", default='_worldpose_global_pose.csv',
                         help="pose filename where MAV absolute positions are saved")
     parser.add_argument("-cam", "--caminfo_filename",default='_camera_color_camera_info.csv', help="camera info filename where calibration info is saved")
     args = parser.parse_args()
