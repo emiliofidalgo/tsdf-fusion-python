@@ -35,6 +35,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits import mplot3d
 import numpy as np
 import os
+import transformations as trans
 from pyquaternion import Quaternion
 import shutil
 import sys
@@ -130,18 +131,32 @@ class TSDFBuilder:
         # Filling the pose
         pose = np.eye(4)
 
+        dpose = -1
+
         # Filling translation
-        pose[0,3] = float(pose_data[6])
-        pose[1,3] = float(pose_data[7])
-        pose[2,3] = float(pose_data[8])
+        # pose[0,3] = float(pose_data[6 + dpose])
+        # pose[1,3] = float(pose_data[7 + dpose])
+        # pose[2,3] = float(pose_data[8 + dpose])
+
+        tx = float(pose_data[6 + dpose])
+        ty = float(pose_data[7 + dpose])
+        tz = float(pose_data[8 + dpose])
+
+        pose[0,3] = ty # X
+        pose[1,3] = tz # Y 
+        pose[2,3] = tx # Z
 
         # Filling rotation
-        qw = float(pose_data[12])
-        qx = float(pose_data[9])
-        qy = float(pose_data[10])
-        qz = float(pose_data[11])
+        qw = float(pose_data[12 + dpose])
+        qx = float(pose_data[9 + dpose])
+        qy = float(pose_data[10 + dpose])
+        qz = float(pose_data[11 + dpose])
 
-        quat = Quaternion(qw, qx, qy, qz)
+        #quat = Quaternion(qw, qx, qy, qz)
+
+        euler    = trans.euler_from_quaternion([qx, qy, qz, qw], 'rzyx')
+        new_quat = trans.quaternion_from_euler(euler[1], euler[2], euler[0], 'rzyx')
+        quat = Quaternion(new_quat[3], new_quat[0], new_quat[1], new_quat[2])
 
         # pose[0,0] = 1 - 2*qy**2 - 2*qz**2
         # pose[0,1] = 2*qx*qy - 2*qz*qw
@@ -156,11 +171,16 @@ class TSDFBuilder:
         pose[:3,:3] = quat.rotation_matrix
 
         static_trans = np.eye(4)
-        static_trans[:3,:3] = np.array([[0.9975641, 0.0000000, 0.0697565],
-                                        [0.0000000, 1.0000000, 0.0000000],
-                                        [-0.0697565, 0.0000000, 0.9975641]])
-        static_trans[0, 3] = 0.15
-        static_trans[2, 3] = -0.05
+        # static_trans[:3,:3] = np.array([[0.9975641, 0.0000000, 0.0697565],
+        #                                 [0.0000000, 1.0000000, 0.0000000],
+        #                                 [-0.0697565, 0.0000000, 0.9975641]])
+        # static_trans[0, 3] = 0.15
+        # static_trans[2, 3] = -0.05
+        static_trans[:3,:3] = np.array([[1.0000000, 0.0000000, 0.0000000],
+                                        [0.0000000, 0.9975641, -0.0697565],
+                                        [0.0000000, 0.0697565, 0.9975641]])
+        static_trans[1, 3] = -0.05
+        static_trans[2, 3] = 0.15
 
         return np.matmul(pose, static_trans)
     
