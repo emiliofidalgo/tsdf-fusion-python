@@ -142,8 +142,8 @@ class TSDFBuilder:
         ty = float(pose_data[7 + dpose])
         tz = float(pose_data[8 + dpose])
 
-        pose[0,3] = ty # X
-        pose[1,3] = tz # Y 
+        pose[0,3] = -ty # X
+        pose[1,3] = -tz # Y 
         pose[2,3] = tx # Z
 
         # Filling rotation
@@ -154,8 +154,9 @@ class TSDFBuilder:
 
         #quat = Quaternion(qw, qx, qy, qz)
 
-        euler    = trans.euler_from_quaternion([qx, qy, qz, qw], 'rzyx')
-        new_quat = trans.quaternion_from_euler(euler[1], euler[2], euler[0], 'rzyx')
+        euler    = trans.euler_from_quaternion([qx, qy, qz, qw], 'szyx')
+        # new_quat = trans.quaternion_from_euler(euler[1], euler[0], euler[2], 'szyx')
+        new_quat = trans.quaternion_from_euler(euler[1], -euler[0], -euler[2], 'szyx')
         quat = Quaternion(new_quat[3], new_quat[0], new_quat[1], new_quat[2])
 
         # pose[0,0] = 1 - 2*qy**2 - 2*qz**2
@@ -170,19 +171,20 @@ class TSDFBuilder:
 
         pose[:3,:3] = quat.rotation_matrix
 
-        static_trans = np.eye(4)
-        # static_trans[:3,:3] = np.array([[0.9975641, 0.0000000, 0.0697565],
-        #                                 [0.0000000, 1.0000000, 0.0000000],
-        #                                 [-0.0697565, 0.0000000, 0.9975641]])
-        # static_trans[0, 3] = 0.15
-        # static_trans[2, 3] = -0.05
-        static_trans[:3,:3] = np.array([[1.0000000, 0.0000000, 0.0000000],
-                                        [0.0000000, 0.9975641, -0.0697565],
-                                        [0.0000000, 0.0697565, 0.9975641]])
-        static_trans[1, 3] = -0.05
-        static_trans[2, 3] = 0.15
+        # static_trans = np.eye(4)
+        # # static_trans[:3,:3] = np.array([[0.9975641, 0.0000000, 0.0697565],
+        # #                                 [0.0000000, 1.0000000, 0.0000000],
+        # #                                 [-0.0697565, 0.0000000, 0.9975641]])
+        # # static_trans[0, 3] = 0.15
+        # # static_trans[2, 3] = -0.05
+        # static_trans[:3,:3] = np.array([[1.0000000, 0.0000000, 0.0000000],
+        #                                 [0.0000000, 0.9975641, -0.0697565],
+        #                                 [0.0000000, 0.0697565, 0.9975641]])
+        # static_trans[1, 3] = -0.05
+        # static_trans[2, 3] = 0.15
 
-        return np.matmul(pose, static_trans)
+        # return np.matmul(pose, static_trans)
+        return pose
     
     def _prepare_frames(self):
 
